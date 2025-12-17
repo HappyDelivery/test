@@ -30,7 +30,7 @@ system_instruction = """
 """
 
 model = genai.GenerativeModel(
-    'gemini-1.5-flash',
+    'gemini-pro',
     system_instruction=system_instruction
 )
 
