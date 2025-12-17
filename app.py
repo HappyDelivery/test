@@ -33,7 +33,7 @@ system_instruction = """
 
 # ★★★ 모델 이름을 선생님 목록에 있는 'gemini-2.0-flash'로 변경했습니다! ★★★
 model = genai.GenerativeModel(
-    'gemini-1.5-flash', 
+    'gemini-1.5-flash-latest', 
     system_instruction=system_instruction
 )
 
