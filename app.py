@@ -6,6 +6,11 @@ import os
 st.set_page_config(page_title="AI 솔루션 가이드", page_icon="🤖")
 
 st.title("🤖 AI 솔루션 가이드")
+
+# [버전 확인용 코드] 화면에 현재 도구 버전을 출력합니다.
+# 만약 이 숫자가 0.8.3보다 낮게 나오면 업데이트가 안 된 거예요!
+st.caption(f"🔧 현재 도구 버전: {genai.__version__}") 
+
 st.write("당신에게 딱 맞는 AI 도구를 찾아드리고, 활용법까지 알려드려요!")
 
 # 2. 비밀 금고에서 여권(API Key) 꺼내기
@@ -18,7 +23,6 @@ if not my_api_key:
 # 3. AI 로봇 설정
 genai.configure(api_key=my_api_key)
 
-# ★★★ 여기가 바로 선생님이 만든 앱의 핵심 내용(프롬프트)입니다! ★★★
 system_instruction = """
 당신은 사용자의 요청에 맞춰 최적의 AI 도구를 추천해 주는 'AI 활용 전문가'입니다.
 사용자가 텍스트를 입력하거나 파일을 업로드하면, 다음 순서와 형식에 맞춰 답변해주세요:
@@ -29,8 +33,9 @@ system_instruction = """
 **주의사항:** 설명은 친절하고 전문적인 톤을 유지하세요.
 """
 
+# 다시 최신 모델(gemini-1.5-flash)로 변경!
 model = genai.GenerativeModel(
-    'gemini-pro',
+    'gemini-1.5-flash',
     system_instruction=system_instruction
 )
 
@@ -38,28 +43,20 @@ model = genai.GenerativeModel(
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# 이전 대화 내용 보여주기
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# 사용자가 입력했을 때 처리
 if prompt := st.chat_input("어떤 AI가 필요하신가요? (예: 로고를 만들어주는 무료 AI 추천해줘)"):
-    # 사용자 질문 표시
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # AI 답변 표시
     with st.chat_message("assistant"):
         with st.spinner("전문가가 답변을 작성 중입니다..."):
             try:
-                # 대화 맥락을 유지하며 답변 생성
-                chat = model.start_chat(history=[]) 
                 response = model.generate_content(prompt)
                 st.markdown(response.text)
-                
-                # 답변 저장
                 st.session_state.messages.append({"role": "assistant", "content": response.text})
             except Exception as e:
                 st.error(f"에러가 났어요: {e}")
