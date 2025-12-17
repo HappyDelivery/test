@@ -26,41 +26,45 @@ system_instruction = """
 **주의사항:** 설명은 친절하고 전문적인 톤을 유지하세요.
 """
 
-# 4. [지능형 모델 연결] 알아서 되는 모델을 찾습니다!
+# 4. [지능형 모델 연결] 선생님 목록에 있는 '되는 놈'을 찾습니다!
 @st.cache_resource
 def get_model():
-    # 시도해볼 모델 이름들 (우선순위 순서)
+    # ★ 핵심 수정: 선생님 탐정 목록에 '실제로 있던 이름'들만 넣었습니다!
     candidates = [
-        "gemini-1.5-flash-001",  # 가장 안정적인 버전 (1순위)
-        "gemini-1.5-flash",      # 기본 별명 (2순위)
-        "gemini-1.5-flash-002",  # 최신 업데이트 버전 (3순위)
-        "gemini-pro"             # 구형 안정 버전 (4순위)
+        "gemini-2.0-flash-exp",   # 1순위: 성능 좋고 무료 쿼터가 넉넉한 실험 버전
+        "gemini-flash-latest",    # 2순위: 최신 플래시 모델 별명
+        "gemini-2.0-flash-lite-preview-02-05", # 3순위: 가벼운 최신 프리뷰
+        "gemini-exp-1206"         # 4순위: 또 다른 실험 버전
     ]
     
     selected_model = None
+    last_error = None
+
     for name in candidates:
         try:
             # 테스트 연결 시도
             test_model = genai.GenerativeModel(name)
-            # 아주 간단한 인사로 생존 확인 (비용 거의 0)
+            # 아주 간단한 인사로 생존 확인
             test_model.generate_content("Hi")
             selected_model = name
             break # 성공하면 반복문 탈출!
-        except Exception:
+        except Exception as e:
+            last_error = e
             continue # 실패하면 다음 모델 시도
 
     if selected_model:
-        return genai.GenerativeModel(selected_model, system_instruction=system_instruction), selected_model
+        return genai.GenerativeModel(selected_model, system_instruction=system_instruction), selected_model, None
     else:
-        return None, None
+        return None, None, last_error
 
 # 모델 불러오기
-model, model_name = get_model()
+model, model_name, error_msg = get_model()
 
 if model:
     st.caption(f"🚀 연결 성공! 현재 작동 모델: {model_name}")
 else:
-    st.error("😭 모든 모델 연결에 실패했습니다. API Key 상태를 확인해주세요.")
+    # 어떤 에러인지 화면에 자세히 보여줍니다 (디버깅용)
+    st.error(f"😭 연결 가능한 모델을 찾지 못했습니다.\n마지막 에러 내용: {error_msg}")
     st.stop()
 
 # 5. 채팅창 만들기
