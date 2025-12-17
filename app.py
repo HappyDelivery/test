@@ -6,7 +6,7 @@ import os
 st.set_page_config(page_title="AI 솔루션 가이드", page_icon="🤖")
 
 st.title("🤖 AI 솔루션 가이드")
-st.caption("🚀 Powered by Gemini 2.0 Flash") # 최신 모델 사용 표시
+st.caption("🚀 Powered by Gemini 1.5 Flash") # 최신 모델 사용 표시
 
 st.write("당신에게 딱 맞는 AI 도구를 찾아드리고, 활용법까지 알려드려요!")
 
