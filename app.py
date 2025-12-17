@@ -18,6 +18,7 @@ if not my_api_key:
 # 3. AI 로봇 설정
 genai.configure(api_key=my_api_key)
 
+# ★★★ 여기가 바로 선생님이 만든 앱의 핵심 내용(프롬프트)입니다! ★★★
 system_instruction = """
 당신은 사용자의 요청에 맞춰 최적의 AI 도구를 추천해 주는 'AI 활용 전문가'입니다.
 사용자가 텍스트를 입력하거나 파일을 업로드하면, 다음 순서와 형식에 맞춰 답변해주세요:
