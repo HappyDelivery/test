@@ -1,107 +1,120 @@
 import streamlit as st
 import google.generativeai as genai
+import time
 
-# ==========================================
+# --------------------------------------------------------------------------
 # 1. 설정 및 구성 (Configuration)
-# ==========================================
+# --------------------------------------------------------------------------
+
+# 페이지 기본 설정
 st.set_page_config(
-    page_title="나만의 AI 어시스턴트",
-    page_icon="🤖",
-    layout="wide"
+    page_title="Happy Delivery AI",
+    page_icon="🚚",
+    layout="centered"
 )
 
-# 사이드바에서 API 키 입력 받기 (보안을 위해)
-# 실제 배포시에는 st.secrets를 사용하는 것이 좋습니다.
-with st.sidebar:
-    st.header("설정 (Settings)")
-    api_key = st.text_input("Google API Key를 입력하세요", type="password")
-    
-    # AI Studio에 있던 'System Instruction'을 여기에 넣으세요
-    system_instruction = st.text_area(
-        "시스템 프롬프트 (System Instruction)",
-        value="당신은 도움이 되는 AI 어시스턴트입니다. 명확하고 친절하게 답변하세요.",
-        height=200
-    )
-    
-    st.divider()
-    model_type = st.selectbox("모델 선택", ["gemini-1.5-flash", "gemini-1.5-pro"])
-    temperature = st.slider("창의성 (Temperature)", 0.0, 2.0, 1.0)
+# [보안 주의] 실제 배포 시에는 이 키를 st.secrets에 저장해서 불러와야 합니다.
+# 현재는 테스트를 위해 직접 입력해 두었습니다.
+API_KEY = "AIzaSyBVxYQzLTs8uRP4yyJYS8yBDewLSm896Jg"
 
-# ==========================================
-# 2. 로직 구현 (Logic)
-# ==========================================
+# --------------------------------------------------------------------------
+# [중요] AI Studio의 'System Instructions' 내용을 아래 따옴표 안에 붙여넣으세요.
+# 예: "너는 친절한 배달 상담원이야. 고객의 주문 상태를 확인해줘..."
+# --------------------------------------------------------------------------
+SYSTEM_PROMPT = """
+당신은 최고의 AI 어시스턴트입니다. 
+사용자의 질문에 친절하고 정확하게 답변하며, 이모지를 적절히 사용하여 생동감 있게 대화하세요.
+(이곳에 Google AI Studio에서 작성했던 프롬프트 내용을 덮어쓰기 하세요)
+"""
 
-# API 키가 없으면 경고 표시 후 중단
-if not api_key:
-    st.info("좌측 사이드바에 Google API Key를 입력해주세요.")
-    st.stop()
+# 모델 설정 (가장 가성비 좋고 빠른 모델 선택)
+MODEL_NAME = "gemini-1.5-flash" 
 
-# Gemini 설정
-try:
-    genai.configure(api_key=api_key)
-    # 시스템 프롬프트가 적용된 모델 생성
-    model = genai.GenerativeModel(
-        model_name=model_type,
-        system_instruction=system_instruction,
-        generation_config={"temperature": temperature}
-    )
-except Exception as e:
-    st.error(f"API 설정 중 오류가 발생했습니다: {e}")
-    st.stop()
+# --------------------------------------------------------------------------
+# 2. 로직 구현 (Backend Logic)
+# --------------------------------------------------------------------------
 
-# 세션 상태 초기화 (대화 기록 저장용)
+def configure_genai():
+    try:
+        genai.configure(api_key=API_KEY)
+        # 시스템 프롬프트가 적용된 모델 생성
+        model = genai.GenerativeModel(
+            model_name=MODEL_NAME,
+            system_instruction=SYSTEM_PROMPT
+        )
+        return model
+    except Exception as e:
+        st.error(f"API 연결 오류: {e}")
+        return None
+
+# 세션 상태 초기화 (대화 기록 저장소)
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# ==========================================
-# 3. UI 렌더링 (UI Rendering)
-# ==========================================
+# 모델 초기화
+model = configure_genai()
 
-st.title("🚀 My AI App Service")
-st.caption("Powered by Google Gemini & Streamlit")
+# --------------------------------------------------------------------------
+# 3. 화면 구현 (Frontend UI)
+# --------------------------------------------------------------------------
 
-# 기존 대화 내용 표시
+st.title("🚚 Happy Delivery AI Service")
+st.markdown("---")
+
+# 기존 대화 기록 표시 (채팅창 유지)
 for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
+    role = "user" if message["role"] == "user" else "assistant"
+    with st.chat_message(role):
         st.markdown(message["content"])
 
 # 사용자 입력 처리
-if prompt := st.chat_input("메시지를 입력하세요..."):
-    # 1. 사용자 메시지 표시 및 저장
+if prompt := st.chat_input("무엇을 도와드릴까요?"):
+    
+    # 1. 사용자 메시지 화면 표시
     with st.chat_message("user"):
         st.markdown(prompt)
+    
+    # 2. 대화 기록에 사용자 메시지 추가
     st.session_state.messages.append({"role": "user", "content": prompt})
 
-    # 2. AI 응답 생성 및 표시
-    with st.chat_message("assistant"):
-        message_placeholder = st.empty()
-        full_response = ""
-        
-        try:
-            # 대화 기록을 포함하여 문맥 유지 (Context Retention)
-            # Gemini는 history 객체를 따로 관리하지만, Streamlit 방식에 맞춰 매번 history를 구성하거나
-            # start_chat을 이용할 수 있습니다. 여기서는 1회성 턴 방식 예시이나,
-            # 멀티턴(대화 기억)을 위해 chat session을 구성합니다.
+    # 3. AI 응답 생성
+    if model:
+        with st.chat_message("assistant"):
+            message_placeholder = st.empty()
+            full_response = ""
             
-            history = [
-                {"role": m["role"], "parts": [m["content"]]} 
-                for m in st.session_state.messages[:-1] # 현재 프롬프트 제외
-            ]
-            
-            chat = model.start_chat(history=history)
-            response = chat.send_message(prompt, stream=True)
-            
-            # 스트리밍 효과 구현
-            for chunk in response:
-                if chunk.text:
-                    full_response += chunk.text
-                    message_placeholder.markdown(full_response + "▌")
-            
-            message_placeholder.markdown(full_response)
-            
-        except Exception as e:
-            st.error(f"에러 발생: {e}")
-            full_response = "죄송합니다. 오류가 발생하여 답변할 수 없습니다."
+            try:
+                # 문맥(Context) 유지를 위해 과거 대화 내용을 모델에 전달
+                # Gemini API 형식에 맞게 변환
+                history_for_api = []
+                for msg in st.session_state.messages[:-1]: # 현재 질문 제외하고 과거 기록만
+                    role = "user" if msg["role"] == "user" else "model"
+                    history_for_api.append({"role": role, "parts": [msg["content"]]})
+                
+                chat = model.start_chat(history=history_for_api)
+                response = chat.send_message(prompt, stream=True)
+                
+                # 타자 치는 효과(Streaming) 구현
+                for chunk in response:
+                    if chunk.text:
+                        full_response += chunk.text
+                        message_placeholder.markdown(full_response + "▌")
+                        
+                message_placeholder.markdown(full_response)
+                
+                # 4. AI 응답 기록 저장
+                st.session_state.messages.append({"role": "model", "content": full_response})
+                
+            except Exception as e:
+                error_msg = f"죄송합니다. 오류가 발생했습니다: {str(e)}"
+                st.error(error_msg)
+                st.session_state.messages.append({"role": "model", "content": error_msg})
 
-    # 3. AI 응답 저장
-    st.session_state.messages.append({"role": "model", "content": full_response})
+# 사이드바 (추가 기능)
+with st.sidebar:
+    st.header("설정")
+    if st.button("대화 내용 초기화 🗑️"):
+        st.session_state.messages = []
+        st.rerun()
+    st.caption(f"Model: {MODEL_NAME}")
+    st.caption("Powered by Google Gemini")
