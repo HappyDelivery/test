@@ -6,8 +6,8 @@ import os
 # 1. 페이지 설정 및 디자인
 # ==========================================
 st.set_page_config(
-    page_title="PromptGenesis AI V7",
-    page_icon="🛡️", # 보안 아이콘으로 변경
+    page_title="PromptGenesis AI V8",
+    page_icon="🧬",
     layout="wide"
 )
 
@@ -27,15 +27,15 @@ st.markdown("""
     
     /* 버튼 스타일 */
     .stButton > button {
-        background: linear-gradient(90deg, #4b6cb7 0%, #182848 100%);
+        background: linear-gradient(90deg, #3a7bd5 0%, #3a6073 100%);
         color: white; border: none; font-weight: bold; height: 55px;
         font-size: 1.1rem; transition: all 0.2s ease-in-out;
     }
     .stButton > button:hover {
-        transform: scale(1.02); box-shadow: 0 4px 15px rgba(75, 108, 183, 0.5);
+        transform: scale(1.02); box-shadow: 0 4px 15px rgba(58, 123, 213, 0.5);
     }
     
-    /* 결과 박스 & 에러 박스 */
+    /* 결과 박스 */
     .result-box {
         background-color: #1a1c24; padding: 20px;
         border-radius: 10px; border: 1px solid #333;
@@ -57,7 +57,7 @@ TEMPLATES = {
     "🛍️ 상품 상세페이지 카피": {
         "personas": ["10년차 이커머스 전문 카피라이터", "홈쇼핑 쇼호스트", "소비자 심리학 전문가"],
         "task": "고객의 구매 욕구를 자극하는 상품 상세페이지 도입부와 특징 설명(USP)을 작성하라.",
-        "default_context": ["문제 제기(Pain Point) 후 해결책 제시", "모바일 가독성 최적화"]
+        "default_context": ["문제 제기(Pain Point) 후 해결책 제시", "모바일 가독성 최적화", "감성적인 스토리텔링"]
     },
     "📝 SEO 블로그 포스팅": {
         "personas": ["SEO 최적화 전문 마케터", "IT/테크 전문 파워 블로거", "논리적인 칼럼니스트"],
@@ -88,70 +88,48 @@ COMMON_OPTIONS = [
 ]
 
 # ==========================================
-# 3. 함수: 모델 자동 감지
-# ==========================================
-def get_available_models(api_key):
-    try:
-        genai.configure(api_key=api_key)
-        models = genai.list_models()
-        model_list = []
-        for m in models:
-            if 'generateContent' in m.supported_generation_methods:
-                model_list.append(m.name)
-        # Flash 모델 우선 정렬
-        model_list.sort(key=lambda x: 0 if 'flash' in x else (1 if 'pro' in x else 2))
-        return model_list
-    except Exception:
-        return []
-
-# ==========================================
-# 4. 사이드바 구성 (보안 강화됨)
+# 3. 사이드바 구성 (심플 & 자동연결)
 # ==========================================
 with st.sidebar:
-    # 캐릭터 표시
     if os.path.exists("character.png"):
-        st.image("character.png", width=150)
-    else:
-        st.write("🦸‍♂️ Prompt Master")
+        st.image("character.png", width=180)
 
-    st.header("🔐 보안 설정")
+    # [핵심] secrets.toml에서 키를 자동으로 가져옴
+    # 사용자는 아무것도 입력할 필요가 없습니다.
+    api_key = st.secrets.get("GOOGLE_API_KEY", None)
 
-    # 1. API Key 처리 (Secrets 우선 사용)
-    # secrets.toml에 키가 있으면 자동으로 가져옵니다.
-    if "GOOGLE_API_KEY" in st.secrets:
-        api_key = st.secrets["GOOGLE_API_KEY"]
-        st.success("✅ 안전한 저장소(Secrets)의 키를 사용 중입니다.")
-    else:
-        # 파일이 없으면 입력창 표시 (여전히 password 타입)
-        api_key = st.text_input(
-            "Google API Key 입력", 
-            type="password", 
-            placeholder="새로 발급받은 키를 입력하세요"
-        )
-        st.caption("Tip: `.streamlit/secrets.toml` 파일을 만들면 매번 입력하지 않아도 됩니다.")
-
-    # 2. 모델 선택 (자동 감지)
-    selected_model = None
-    if api_key:
-        available_models = get_available_models(api_key)
-        if available_models:
-            selected_model = st.selectbox("🤖 AI 모델 선택", available_models)
-            if "flash" in selected_model:
-                st.caption("⚡ 속도가 빠른 Flash 모델이 추천됩니다.")
-        else:
-            # 키가 유출되어 차단된 경우 등 에러 발생 시
-            st.error("🚨 유효하지 않은 API Key입니다.")
-            st.warning("Google AI Studio에서 '새 키'를 발급받으세요. 이전 키는 차단되었습니다.")
+    # 만약 secrets.toml 파일이 없거나 키가 없으면 경고창 표시
+    if not api_key:
+        st.error("⚠️ `secrets.toml` 파일에 API Key가 없습니다.")
+        st.info("새로 발급받은 키를 secrets.toml 파일에 저장해주세요.")
     
+    # 모델 선택 (자동 감지)
+    available_models = ["models/gemini-1.5-flash"] # 기본값
+    if api_key:
+        try:
+            genai.configure(api_key=api_key)
+            models = genai.list_models()
+            # 사용 가능한 모델 필터링 및 정렬
+            model_list = [m.name for m in models if 'generateContent' in m.supported_generation_methods]
+            model_list.sort(key=lambda x: 0 if 'flash' in x else 1) # Flash 우선
+            if model_list:
+                available_models = model_list
+        except Exception:
+            # 키가 틀렸거나 네트워크 문제 시 조용히 넘어감
+            pass
+
+    st.markdown("### ⚙️ 설정")
+    selected_model = st.selectbox("AI 모델", available_models)
     temp = st.slider("창의성 (Temperature)", 0.0, 1.0, 0.7)
+
     st.divider()
-    st.markdown("Developed by **20년차 개발자**")
+    st.caption("PromptGenesis V8")
 
 # ==========================================
-# 5. 메인 UI 구성
+# 4. 메인 UI 구성
 # ==========================================
-st.title("PromptGenesis AI V7")
-st.markdown("##### 🛡️ 보안이 강화된 전문가용 프롬프트 생성기")
+st.title("PromptGenesis AI")
+st.markdown("##### 🚀 당신의 아이디어를 전문가급 프롬프트로 변환하세요.")
 
 col_left, col_right = st.columns([1, 1], gap="large")
 
@@ -177,13 +155,13 @@ with col_left:
         task = st.text_area("🎯 핵심 과제 (AI가 할 일)", value=current_data["task"], height=100)
         
         # Context (멀티 선택)
-        st.markdown("**📝 추가 조건 (클릭하여 선택)**")
+        st.markdown("**📝 추가 조건 (선택)**")
         all_options = list(set(current_data["default_context"] + COMMON_OPTIONS))
         selected_options = st.multiselect("조건 선택", all_options, default=current_data["default_context"])
         
         additional_context = st.text_input("그 외 추가 내용", placeholder="예: 어조는 아주 정중하게...")
 
-    generate_btn = st.button("✨ 슈퍼 프롬프트 생성 (Generate)", type="primary", use_container_width=True)
+    generate_btn = st.button("✨ 슈퍼 프롬프트 생성", type="primary", use_container_width=True)
 
 # --- [오른쪽] 결과 패널 ---
 with col_right:
@@ -192,16 +170,14 @@ with col_right:
 
     if generate_btn:
         if not api_key:
-            st.warning("👈 사이드바에 API Key를 입력하거나 secrets.toml을 설정하세요.")
-        elif not selected_model:
-            st.error("⚠️ 유효한 모델을 찾을 수 없습니다. API Key를 확인하세요.")
+            st.error("🚨 API Key 설정이 필요합니다. (secrets.toml 확인)")
         else:
             try:
                 # 로딩 애니메이션
                 output_area.markdown("""
                     <div style="text-align: center; padding: 50px;">
                         <img src="https://i.gifer.com/ZZ5H.gif" width="50">
-                        <p style="color: #bbb;">최적의 설계를 진행 중입니다...</p>
+                        <p style="color: #bbb;">최적화 중...</p>
                     </div>
                 """, unsafe_allow_html=True)
 
@@ -220,9 +196,9 @@ with col_right:
                 - **Constraints:** {context_str}
 
                 [작성 규칙]
-                1. 결과물은 **마크다운 코드 블록** 안에 작성하세요.
+                1. 결과물은 복사하기 쉽게 **마크다운 코드 블록** 안에 작성하세요.
                 2. [Role], [Task], [Context], [Tone] 등으로 섹션을 나누세요.
-                3. 바로 복사해서 사용할 수 있도록 깔끔하게 출력하세요.
+                3. 변수 처리가 필요한 부분은 {{변수}}로 표시하세요.
                 """
                 
                 # API 호출
@@ -235,14 +211,18 @@ with col_right:
                 )
                 
                 output_area.markdown(response.text)
-                st.toast("생성 완료!", icon="🎉")
+                st.toast("완료되었습니다!", icon="🎉")
 
             except Exception as e:
-                # 403 에러 명시적 처리
-                if "403" in str(e):
-                    output_area.error("🚨 **API Key 차단됨 (403 Error)**")
-                    st.error("Google이 해당 키를 유출된 것으로 판단하여 차단했습니다. 새 키를 발급받으세요.")
+                # 에러 핸들링
+                err_msg = str(e)
+                if "403" in err_msg or "API key not valid" in err_msg:
+                    output_area.error("🚨 **API Key 오류**")
+                    st.error("설정된 API Key가 올바르지 않거나 차단되었습니다. secrets.toml을 확인하세요.")
+                elif "429" in err_msg:
+                    output_area.error("🚨 **사용량 초과**")
+                    st.warning("잠시 후 다시 시도하거나, 사이드바에서 Flash 모델을 선택하세요.")
                 else:
                     output_area.error(f"오류가 발생했습니다: {e}")
     else:
-        output_area.info("왼쪽에서 옵션을 선택하고 버튼을 누르세요.")
+        output_area.info("왼쪽에서 내용을 입력하고 버튼을 눌러보세요.")
