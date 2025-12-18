@@ -36,6 +36,18 @@ st.markdown("""
         background-color: #1f2937; border-radius: 10px;
         color: white; font-weight: bold;
     }
+    /* 탭 스타일 */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 10px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        height: 50px; white-space: pre-wrap;
+        background-color: #1f2937; border-radius: 10px;
+        color: white; font-weight: bold;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: #2575fc; color: white;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -99,7 +111,7 @@ with st.sidebar:
     selected_model = st.selectbox("AI 모델", available_models)
     temp = st.slider("창의성", 0.0, 1.0, 0.7)
     st.divider()
-    st.caption("Mobile Edition V11")
+    st.caption("Mobile Edition V12")
 
 # ==========================================
 # 4. 메인 화면
@@ -115,11 +127,11 @@ current_data = TEMPLATES[cat_key]
 # [2] 할 일 입력
 task = st.text_area("🎯 AI에게 시킬 일 (Task)", value=current_data["task"], height=100)
 
-# [3] 언어 선택 (옵션 명칭 변경)
+# [3] 언어 선택
 lang_mode = st.radio(
     "🌐 출력 언어",
-    ["🇰🇷 한글 전용", "🇺🇸 영어 전용", "🇰🇷 & 🇺🇸 한글/영어 따로 출력"],
-    index=0,
+    ["🇰🇷 한글 전용", "🇺🇸 영어 전용", "🇰🇷 & 🇺🇸 듀얼 모드 (추천)"],
+    index=2,
     horizontal=True
 )
 
@@ -144,18 +156,19 @@ if st.button("✨ 프롬프트 생성 (Touch)", use_container_width=True):
         with st.container():
             with st.spinner("AI가 최적화 중입니다... 🔄"):
                 try:
-                    # [핵심 변경] 언어 모드에 따른 명확한 지시사항
+                    # [핵심 로직] 구분자(SPLIT)를 사용하여 두 버전을 분리 요청
+                    split_token = "|||SPLIT|||"
+                    
                     if "한글 전용" in lang_mode:
                         lang_inst = "프롬프트 전체를 유창한 '한국어'로 작성하세요."
                     elif "영어 전용" in lang_mode:
                         lang_inst = "Write the entire prompt in professional 'English'."
                     else:
-                        # 여기가 수정된 부분입니다.
                         lang_inst = (
-                            "반드시 두 가지 버전을 모두 출력하세요.\n"
-                            "1. 첫 번째: 완벽한 [한국어 버전] 프롬프트를 작성하세요.\n"
-                            "2. 두 번째: 완벽한 [English Version] 프롬프트를 작성하세요.\n"
-                            "3. 두 버전 사이에는 구분선(---)을 넣어 명확히 분리하세요."
+                            f"두 가지 버전을 모두 작성하되, 두 버전 사이에 정확히 '{split_token}' 이라는 텍스트를 넣어 분리하세요.\n"
+                            "1. 첫 번째: [한국어 버전] 프롬프트 작성\n"
+                            f"2. {split_token} (구분자 출력)\n"
+                            "3. 두 번째: [English Version] 프롬프트 작성"
                         )
 
                     ctx_str = ", ".join(selected_options)
@@ -163,7 +176,7 @@ if st.button("✨ 프롬프트 생성 (Touch)", use_container_width=True):
 
                     meta_prompt = f"""
                     Role: Expert Prompt Engineer.
-                    Task: Create a system prompt for an LLM based on user inputs.
+                    Task: Create a system prompt based on user inputs.
                     
                     [User Inputs]
                     - Role: {final_persona}
@@ -173,16 +186,34 @@ if st.button("✨ 프롬프트 생성 (Touch)", use_container_width=True):
                     [Output Rules]
                     1. Language Instruction: {lang_inst}
                     2. Format: Markdown Code Block.
-                    3. Structure: [Role], [Task], [Context], [Output Format].
+                    3. Do NOT add extra explanations outside the code block.
                     """
 
                     genai.configure(api_key=api_key)
                     model = genai.GenerativeModel(selected_model)
                     response = model.generate_content(meta_prompt, generation_config={"temperature": temp})
                     
+                    # [결과 처리 로직]
+                    full_text = response.text
                     st.success("✅ 생성 완료!")
-                    st.markdown(response.text)
-                    st.caption("👆 위 코드를 복사해서 사용하세요.")
+
+                    # 듀얼 모드일 경우 탭으로 분리
+                    if "듀얼 모드" in lang_mode and split_token in full_text:
+                        parts = full_text.split(split_token)
+                        tab1, tab2 = st.tabs(["🇰🇷 한국어 버전", "🇺🇸 English Version"])
+                        
+                        with tab1:
+                            st.caption("우측 상단 아이콘을 누르면 복사됩니다.")
+                            st.code(parts[0].strip(), language="markdown")
+                            
+                        with tab2:
+                            st.caption("Copy button is on the top right.")
+                            st.code(parts[1].strip(), language="markdown")
+                    
+                    # 단일 모드일 경우 그냥 출력
+                    else:
+                        st.caption("우측 상단 아이콘을 누르면 복사됩니다.")
+                        st.code(full_text, language="markdown")
                     
                 except Exception as e:
                     st.error(f"오류 발생: {e}")
