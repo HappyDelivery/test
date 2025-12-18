@@ -8,80 +8,42 @@ import os
 st.set_page_config(
     page_title="PromptGenesis Mobile",
     page_icon="📱",
-    layout="centered", # 모바일에서는 'wide'보다 'centered'가 앱처럼 보입니다.
-    initial_sidebar_state="collapsed" # 모바일에서 사이드바는 처음에 닫혀있는게 좋습니다.
+    layout="centered",
+    initial_sidebar_state="collapsed"
 )
 
-# 모바일 전용 CSS (여백 줄이기, 폰트 조정)
+# 모바일 전용 CSS
 st.markdown("""
 <style>
-    /* 전체 배경 및 폰트 */
     .stApp { background-color: #0e1117; color: #f0f2f6; }
-    
-    /* 헤더 여백 줄이기 */
     .block-container {
-        padding-top: 2rem;
-        padding-bottom: 3rem;
-        padding-left: 1rem;
-        padding-right: 1rem;
+        padding-top: 2rem; padding-bottom: 3rem;
+        padding-left: 1rem; padding-right: 1rem;
     }
-
-    /* 입력창 스타일 */
     .stTextInput > div > div > input, 
     .stTextArea > div > div > textarea, 
     .stSelectbox > div > div > div {
-        background-color: #262730; 
-        color: white; 
-        border-radius: 12px; /* 둥글게 */
-        font-size: 16px; /* 모바일 가독성 */
+        background-color: #262730; color: white; 
+        border-radius: 12px; font-size: 16px;
     }
-
-    /* 버튼 스타일 (크고 누르기 쉽게) */
     .stButton > button {
         background: linear-gradient(90deg, #6a11cb 0%, #2575fc 100%);
-        color: white; 
-        border: none; 
-        font-weight: bold; 
-        height: 60px; /* 터치 영역 확보 */
-        font-size: 1.2rem; 
-        border-radius: 15px;
-        box-shadow: 0 4px 10px rgba(37, 117, 252, 0.3);
-        width: 100%;
+        color: white; border: none; font-weight: bold; 
+        height: 60px; font-size: 1.2rem; border-radius: 15px;
+        box-shadow: 0 4px 10px rgba(37, 117, 252, 0.3); width: 100%;
     }
-    .stButton > button:hover {
-        opacity: 0.9;
-    }
-
-    /* 결과 박스 (카드 형태) */
-    .result-box {
-        background-color: #1a1c24; 
-        padding: 15px;
-        border-radius: 15px; 
-        border: 1px solid #444;
-        font-family: 'Consolas', monospace;
-        font-size: 14px;
-        line-height: 1.5; 
-        white-space: pre-wrap;
-        margin-top: 10px;
-    }
-
-    /* Expander (접이식 메뉴) 스타일 */
     .streamlit-expanderHeader {
-        background-color: #1f2937;
-        border-radius: 10px;
-        color: white;
-        font-weight: bold;
+        background-color: #1f2937; border-radius: 10px;
+        color: white; font-weight: bold;
     }
 </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. 데이터셋 (템플릿)
+# 2. 데이터셋
 # ==========================================
 TEMPLATES = {
-    "✨ 직접 입력 (Custom)": {
-        "personas": ["직접 입력"], "task": "", "default_context": []
-    },
+    "✨ 직접 입력 (Custom)": {"personas": ["직접 입력"], "task": "", "default_context": []},
     "🛍️ 상품 상세페이지": {
         "personas": ["이커머스 카피라이터", "홈쇼핑 쇼호스트", "심리학 전문가"],
         "task": "구매 욕구를 자극하는 상세페이지 도입부와 특징 설명(USP) 작성",
@@ -115,20 +77,15 @@ COMMON_OPTIONS = [
 ]
 
 # ==========================================
-# 3. 사이드바 (설정은 숨김)
+# 3. 사이드바
 # ==========================================
 with st.sidebar:
     if os.path.exists("character.png"):
         st.image("character.png", width=150)
     
     st.header("⚙️ 설정")
-    
-    # Secrets에서 키 가져오기
     api_key = st.secrets.get("GOOGLE_API_KEY", None)
-    if not api_key:
-        st.error("Secrets 설정 필요")
     
-    # 모델 선택
     available_models = ["models/gemini-1.5-flash"]
     if api_key:
         try:
@@ -141,36 +98,33 @@ with st.sidebar:
     
     selected_model = st.selectbox("AI 모델", available_models)
     temp = st.slider("창의성", 0.0, 1.0, 0.7)
-    
     st.divider()
-    st.caption("Mobile Edition V10")
+    st.caption("Mobile Edition V11")
 
 # ==========================================
-# 4. 메인 화면 (모바일 Flow)
+# 4. 메인 화면
 # ==========================================
 
-# 타이틀 (작고 깔끔하게)
 st.markdown("### 📱 PromptGenesis AI")
 st.caption("터치 한 번으로 만드는 전문가 프롬프트")
 
-# [1] 핵심 선택 (가장 위에 노출)
+# [1] 주제 선택
 cat_key = st.selectbox("📂 주제를 선택하세요", list(TEMPLATES.keys()))
 current_data = TEMPLATES[cat_key]
 
-# [2] 태스크 입력 (가장 중요하므로 항상 보임)
+# [2] 할 일 입력
 task = st.text_area("🎯 AI에게 시킬 일 (Task)", value=current_data["task"], height=100)
 
-# [3] 언어 선택 (라디오 버튼)
+# [3] 언어 선택 (옵션 명칭 변경)
 lang_mode = st.radio(
     "🌐 출력 언어",
-    ["🇰🇷 한글 전용", "🇺🇸 영어 전용", "🇰🇷+🇺🇸 한글+영어"],
-    index=2, # 기본값: 한글+영어
+    ["🇰🇷 한글 전용", "🇺🇸 영어 전용", "🇰🇷 & 🇺🇸 한글/영어 따로 출력"],
+    index=0,
     horizontal=True
 )
 
-# [4] 세부 설정 (접이식 - 모바일 공간 절약)
+# [4] 세부 설정 (Expander)
 with st.expander("🔽 세부 설정 (페르소나, 조건) 열기"):
-    # 페르소나
     persona_options = current_data["personas"] + ["직접 입력..."]
     selected_persona = st.selectbox("🎭 역할 (Persona)", persona_options)
     if selected_persona == "직접 입력..." or cat_key == "✨ 직접 입력 (Custom)":
@@ -178,33 +132,35 @@ with st.expander("🔽 세부 설정 (페르소나, 조건) 열기"):
     else:
         final_persona = selected_persona
         
-    # 옵션 선택
     all_opts = list(set(current_data["default_context"] + COMMON_OPTIONS))
     selected_options = st.multiselect("📝 추가 조건", all_opts, default=current_data["default_context"])
     add_ctx = st.text_input("직접 추가할 조건", placeholder="예: 친절하게...")
 
-# [5] 생성 버튼 (크고 누르기 쉽게)
+# [5] 생성 버튼
 if st.button("✨ 프롬프트 생성 (Touch)", use_container_width=True):
     if not api_key:
         st.error("설정(Secrets)에 API Key가 없습니다.")
     else:
-        result_container = st.container()
-        
-        # 로딩 표시
-        with result_container:
+        with st.container():
             with st.spinner("AI가 최적화 중입니다... 🔄"):
                 try:
-                    # 언어 모드 설정
-                    lang_inst = ""
-                    if "한글 전용" in lang_mode: lang_inst = "한국어로 작성"
-                    elif "영어 전용" in lang_mode: lang_inst = "Professional English"
-                    else: lang_inst = "명령어는 영어, 설명은 한국어 병기"
+                    # [핵심 변경] 언어 모드에 따른 명확한 지시사항
+                    if "한글 전용" in lang_mode:
+                        lang_inst = "프롬프트 전체를 유창한 '한국어'로 작성하세요."
+                    elif "영어 전용" in lang_mode:
+                        lang_inst = "Write the entire prompt in professional 'English'."
+                    else:
+                        # 여기가 수정된 부분입니다.
+                        lang_inst = (
+                            "반드시 두 가지 버전을 모두 출력하세요.\n"
+                            "1. 첫 번째: 완벽한 [한국어 버전] 프롬프트를 작성하세요.\n"
+                            "2. 두 번째: 완벽한 [English Version] 프롬프트를 작성하세요.\n"
+                            "3. 두 버전 사이에는 구분선(---)을 넣어 명확히 분리하세요."
+                        )
 
-                    # 조건 합치기
                     ctx_str = ", ".join(selected_options)
                     if add_ctx: ctx_str += f", {add_ctx}"
 
-                    # 메타 프롬프트
                     meta_prompt = f"""
                     Role: Expert Prompt Engineer.
                     Task: Create a system prompt for an LLM based on user inputs.
@@ -213,20 +169,17 @@ if st.button("✨ 프롬프트 생성 (Touch)", use_container_width=True):
                     - Role: {final_persona}
                     - Task: {task}
                     - Context: {ctx_str}
-                    - Language Mode: {lang_mode}
                     
-                    [Rules]
-                    1. Language Rule: {lang_inst}
-                    2. Output in Markdown Code Block.
-                    3. Sections: [Role], [Task], [Context], [Output Format].
+                    [Output Rules]
+                    1. Language Instruction: {lang_inst}
+                    2. Format: Markdown Code Block.
+                    3. Structure: [Role], [Task], [Context], [Output Format].
                     """
 
-                    # API 호출
                     genai.configure(api_key=api_key)
                     model = genai.GenerativeModel(selected_model)
                     response = model.generate_content(meta_prompt, generation_config={"temperature": temp})
                     
-                    # 결과 출력
                     st.success("✅ 생성 완료!")
                     st.markdown(response.text)
                     st.caption("👆 위 코드를 복사해서 사용하세요.")
@@ -234,6 +187,5 @@ if st.button("✨ 프롬프트 생성 (Touch)", use_container_width=True):
                 except Exception as e:
                     st.error(f"오류 발생: {e}")
 
-# 하단 여백 확보
 st.write("")
 st.write("")
