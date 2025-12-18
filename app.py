@@ -1,19 +1,21 @@
 import streamlit as st
 import google.generativeai as genai
+import time
+import os
 
 # ==========================================
 # 1. 페이지 설정 및 커스텀 디자인 (CSS)
 # ==========================================
 st.set_page_config(
-    page_title="PromptGenesis AI V3",
+    page_title="PromptGenesis AI - Master Edition",
     page_icon="🧬",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    layout="wide"
 )
 
-# 다크/네온 테마 CSS
+# 커스텀 CSS (로딩 애니메이션 & 디자인)
 st.markdown("""
 <style>
+    /* 전체 배경: 다크 */
     .stApp { background-color: #0e1117; color: #ffffff; }
     
     /* 입력 필드 디자인 */
@@ -24,227 +26,201 @@ st.markdown("""
         border: 1px solid #4b5563; border-radius: 8px;
     }
     
-    /* 버튼 그라데이션 */
+    /* 버튼 스타일 */
     .stButton > button {
-        background: linear-gradient(45deg, #2563eb, #9333ea);
-        color: white; border: none; font-weight: bold;
+        background: linear-gradient(90deg, #FF4B2B 0%, #FF416C 100%);
+        color: white; border: none; font-weight: bold; height: 50px;
         transition: transform 0.2s;
     }
     .stButton > button:hover {
         transform: scale(1.02);
-        box-shadow: 0 0 10px rgba(147, 51, 234, 0.5);
+        box-shadow: 0 0 15px rgba(255, 75, 43, 0.5);
     }
     
-    /* 결과창 박스 */
+    /* 결과창 박스 스타일 */
     .result-box {
-        background-color: #1e1e1e; padding: 20px;
-        border-radius: 10px; border: 1px solid #333;
+        background-color: #1e1e1e; padding: 25px;
+        border-radius: 10px; border: 1px solid #444;
         box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        font-family: 'Courier New', Courier, monospace; /* 코드 느낌 폰트 */
+        white-space: pre-wrap; /* 줄바꿈 유지 */
+    }
+
+    /* 로딩 컨테이너 */
+    .loading-container {
+        text-align: center;
+        padding: 50px;
     }
 </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. 데이터셋: 템플릿 및 옵션 확장
+# 2. 데이터셋: 프롬프트 생성용 템플릿
 # ==========================================
-
-# 15가지 이상의 다양한 활용 분야 템플릿
+# 여기서는 "AI가 수행할 작업"이 아니라 "AI에게 시킬 명령문"을 만드는 것이 목표입니다.
 TEMPLATES = {
-    "✨ 직접 입력 (Custom)": {"persona": "", "task": "", "tone": "전문적인"},
-    "📝 블로그 글 (SEO 최적화)": {
+    "✨ 직접 입력 (Custom)": {"persona": "", "task": ""},
+    "📝 블로그 글 작성 프롬프트": {
         "persona": "SEO 전문 마케터 및 파워 블로거",
-        "task": "주어진 주제로 검색 엔진 상위 노출을 노리는 블로그 글을 작성하세요. 소제목(H2, H3)을 구조적으로 사용하고, 독자가 머무르는 시간을 늘리기 위해 흥미로운 도입부를 작성하세요.",
-        "tone": "친근하고 유익한"
+        "task": "특정 키워드를 포함하여 검색 엔진 노출이 잘 되고, 체류 시간이 긴 매력적인 블로그 포스팅을 작성하게 하라."
     },
-    "📧 비즈니스 콜드 메일": {
-        "persona": "B2B 영업 전문가",
-        "task": "잠재 고객에게 우리 서비스를 소개하고 미팅을 제안하는 콜드 메일을 작성하세요. 스팸처럼 보이지 않도록 개인화된 느낌을 주고, 명확한 Call to Action(CTA)을 포함하세요.",
-        "tone": "정중하지만 설득력 있는"
+    "🎬 유튜브 대본 생성 프롬프트": {
+        "persona": "100만 유튜버 PD 및 스토리텔러",
+        "task": "시청자의 이탈을 막는 후킹(Hook) 멘트와 기승전결이 확실한 5분 분량의 영상 스크립트를 작성하게 하라."
     },
-    "📊 엑셀/구글 시트 수식 생성": {
-        "persona": "엑셀 및 데이터 분석 전문가",
-        "task": "사용자가 원하는 데이터 처리를 위한 엑셀(구글 시트) 함수나 매크로를 작성하고, 각 인자에 대해 설명하세요.",
-        "tone": "기술적이고 명확한"
+    "💻 코드 생성/리팩토링 프롬프트": {
+        "persona": "Google 수석 엔지니어",
+        "task": "제공된 요구사항에 맞춰 버그가 없고 효율적인 파이썬 코드를 작성하고, 각 라인에 대한 주석을 상세히 달게 하라."
     },
-    "💻 파이썬 코드 생성 & 설명": {
-        "persona": "Google 출신 시니어 소프트웨어 엔지니어",
-        "task": "요구사항을 해결하는 효율적이고 Pythonic한 코드를 작성하세요. 코드에는 주석을 달고, 하단에 로직에 대한 설명을 덧붙이세요.",
-        "tone": "전문적인 (Technical)"
+    "📧 콜드 메일(영업) 프롬프트": {
+        "persona": "B2B 세일즈 전문가",
+        "task": "잠재 고객의 거부감을 줄이고 미팅 성사율을 높일 수 있는 짧고 강력한 제안 메일을 작성하게 하라."
     },
-    "🎬 유튜브 스크립트 기획": {
-        "persona": "100만 유튜버 PD",
-        "task": "시청 지속 시간을 늘릴 수 있는 유튜브 영상 오프닝 멘트와 전체적인 대본 구성을 짜주세요. 훅(Hook)을 강력하게 넣으세요.",
-        "tone": "재미있고 에너지가 넘치는"
-    },
-    "🎓 영어 회화 튜터": {
-        "persona": "미국 원어민 영어 강사",
-        "task": "사용자의 입력을 자연스러운 원어민 표현으로 교정해주고, 더 세련된 표현 3가지를 추천해주세요.",
-        "tone": "친절하고 교육적인"
-    },
-    "📋 회의록 요약 및 할 일 정리": {
-        "persona": "꼼꼼한 비즈니스 비서",
-        "task": "중구난방인 회의 내용을 바탕으로 [핵심 안건], [결정 사항], [Action Item]으로 나누어 깔끔하게 요약하세요.",
-        "tone": "객관적이고 간결한"
-    },
-    "🎨 인스타그램 캡션 & 해시태그": {
-        "persona": "SNS 인플루언서",
-        "task": "사진에 어울리는 감성적인 글귀와 유입을 늘릴 수 있는 관련 해시태그 15개를 추천해주세요.",
-        "tone": "감성적이고 트렌디한"
-    },
-    "🍔 다이어트 식단 추천": {
-        "persona": "전문 영양사 및 헬스 트레이너",
-        "task": "사용자의 목표에 맞는 하루 식단표를 짜고, 칼로리와 영양소 균형을 설명하세요.",
-        "tone": "동기부여가 되는"
+    "🎨 이미지 생성(Midjourney) 프롬프트": {
+        "persona": "전문 프롬프트 아티스트",
+        "task": "Midjourney나 DALL-E에서 고퀄리티 이미지를 뽑아낼 수 있는 영어 프롬프트를 상세한 묘사(조명, 화풍, 렌즈 등)와 함께 작성하게 하라."
     }
 }
 
-TONE_OPTIONS = [
-    "전문적인 (Professional)", "친근한 (Friendly)", "설득력 있는 (Persuasive)", 
-    "위트 있는 (Witty)", "간결한 (Concise)", "감성적인 (Emotional)", 
-    "비판적인 (Critical)", "교육적인 (Educational)", "자신감 넘치는 (Confident)", "공손한 (Polite)"
-]
-
-FORMAT_OPTIONS = [
-    "일반 텍스트", "마크다운(Markdown)", "표 (Table)", "HTML 코드", 
-    "JSON 데이터", "이메일 형식", "코드 블록", "체크리스트"
-]
-
 # ==========================================
-# 3. 사이드바 및 설정 (API & Model)
+# 3. 사이드바 (설정 및 캐릭터)
 # ==========================================
 with st.sidebar:
-    st.header("⚙️ 환경 설정")
+    # 1. 캐릭터 이미지 배치 (파일이 있으면 표시)
+    if os.path.exists("character.png"):
+        st.image("character.png", width=200, caption="Prompt Gen Master")
+    else:
+        # 파일이 없을 경우 안내 문구
+        st.info("💡 'character.png' 파일을 폴더에 넣으면 여기에 캐릭터가 표시됩니다.")
+        st.image("https://cdn-icons-png.flaticon.com/512/4712/4712038.png", width=100)
+
+    st.markdown("### ⚙️ 환경 설정")
     
-    # 1. API 키 입력 (기본값 설정됨)
-    api_key = st.text_input("Google API Key", value="AIzaSyBVxYQzLTs8uRP4yyJYS8yBDewLSm896Jg", type="password")
+    # 2. [보안] API Key 마스킹 처리 (type='password')
+    api_key = st.text_input(
+        "Google API Key", 
+        value="AIzaSyBVxYQzLTs8uRP4yyJYS8yBDewLSm896Jg", 
+        type="password", # 여기가 핵심! 이제 별표(*)로 보입니다.
+        help="키는 안전하게 처리됩니다."
+    )
     
-    # 2. [핵심] 모델 자동 감지 로직
-    available_models = []
+    # 모델 자동 감지 및 선택
+    available_models = ["gemini-1.5-flash"] # 기본값
     if api_key:
         try:
             genai.configure(api_key=api_key)
-            # API를 통해 사용 가능한 모델 목록을 가져옵니다.
             models = genai.list_models()
-            for m in models:
-                if 'generateContent' in m.supported_generation_methods:
-                    # gemini-1.5 가 포함된 모델만 필터링 (최신 모델 위주)
-                    if 'gemini' in m.name:
-                        available_models.append(m.name)
-        except Exception:
-            # API 키가 틀렸거나 네트워크 오류 시 기본값
-            available_models = ["models/gemini-1.5-flash"]
-    
-    # 모델 선택 드롭다운 (이제 에러가 안 납니다!)
-    # 모델 목록이 비어있을 경우 대비
-    if not available_models:
-        available_models = ["models/gemini-1.5-flash"]
-        
-    selected_model = st.selectbox("사용할 AI 모델", available_models, index=0)
-    
-    temperature = st.slider("창의성 (Temperature)", 0.0, 1.0, 0.7, help="높을수록 창의적, 낮을수록 정해진 답을 합니다.")
-    
+            detected = [m.name for m in models if 'generateContent' in m.supported_generation_methods and 'gemini' in m.name]
+            if detected: available_models = detected
+        except:
+            pass # 에러 시 기본값 사용
+            
+    selected_model = st.selectbox("AI 모델 선택", available_models)
+    temperature = st.slider("창의성 (Creative Level)", 0.0, 1.0, 0.7)
+
     st.divider()
-    st.info(f"현재 선택된 모델:\n{selected_model}")
+    st.markdown("Developed by **20년차 개발자 & AI 전문가**")
 
 # ==========================================
-# 4. 메인 UI (2단 레이아웃)
+# 4. 메인 UI (프롬프트 엔지니어링 도구)
 # ==========================================
-st.title("🧬 PromptGenesis AI V3")
-st.markdown("**당신의 아이디어를 실행 가능한 완벽한 결과물로 변환합니다.**")
 
-col_left, col_right = st.columns([1, 1], gap="medium")
+# 헤더 영역 (캐릭터와 타이틀)
+c1, c2 = st.columns([1, 5])
+with c1:
+    if os.path.exists("character.png"):
+        st.image("character.png", width=80)
+    else:
+        st.write("🤖")
+with c2:
+    st.title("PromptGenesis AI V4")
+    st.caption("내가 원하는 결과를 얻기 위한 **'최적의 질문(Prompt)'**을 만들어주는 AI 도구입니다.")
 
-# --- 왼쪽: 입력 패널 ---
-with col_left:
-    st.subheader("🟦 프롬프트 설계")
+st.markdown("---")
+
+col_input, col_output = st.columns([1, 1], gap="large")
+
+# --- [왼쪽] 입력 패널 ---
+with col_input:
+    st.subheader("🛠️ 설계도 작성")
     
     # 템플릿 선택
-    cat_key = st.selectbox("🚀 활용 분야 선택 (자동 템플릿)", list(TEMPLATES.keys()))
+    cat_key = st.selectbox("어떤 프롬프트를 만들고 싶나요?", list(TEMPLATES.keys()))
     curr_tmpl = TEMPLATES[cat_key]
 
     # 입력 폼
-    persona = st.text_input("🎭 페르소나 (역할)", value=curr_tmpl["persona"])
-    task = st.text_area("🎯 핵심 과제 (지시사항)", value=curr_tmpl["task"], height=150)
-    context = st.text_area("📂 배경 자료 / 데이터", placeholder="참고할 텍스트나 데이터를 여기에 붙여넣으세요...", height=100)
+    target_persona = st.text_input("🎭 AI에게 부여할 역할 (Persona)", value=curr_tmpl["persona"], placeholder="예: 20년차 개발자")
+    target_task = st.text_area("🎯 AI가 수행해야 할 작업 (Task)", value=curr_tmpl["task"], height=100, placeholder="예: 블로그 글을 써라")
     
-    c1, c2 = st.columns(2)
-    with c1:
-        # 출력 형식을 다중 선택이 아닌 단일 선택으로 변경 (명확성을 위해) 또는 콤보박스
-        out_fmt = st.selectbox("📝 출력 형식", FORMAT_OPTIONS)
-    with c2:
-        # 톤 선택 (기본값 매칭)
-        # 템플릿의 톤이 옵션에 있으면 그걸 선택, 아니면 첫 번째
-        default_tone_idx = 0
-        for i, t in enumerate(TONE_OPTIONS):
-            if curr_tmpl["tone"] in t:
-                default_tone_idx = i
-                break
-        tone = st.selectbox("🗣️ 어조 (Tone)", TONE_OPTIONS, index=default_tone_idx)
+    user_context = st.text_area("📂 추가 제약 조건 / 포함할 내용", height=100, placeholder="예: 어조는 친절하게, 분량은 1000자 이상, 마크다운 형식 사용 등")
 
-    generate_btn = st.button("✨ 결과 생성 (Generate)", type="primary")
+    # 생성 버튼
+    generate_btn = st.button("🚀 슈퍼 프롬프트 생성 (Generate)", type="primary")
 
-# --- 오른쪽: 결과 패널 ---
-with col_right:
-    st.subheader("🟩 결과 확인")
-    result_placeholder = st.empty() # 결과를 스트리밍으로 보여줄 공간
+# --- [오른쪽] 결과 패널 ---
+with col_output:
+    st.subheader("💎 생성된 프롬프트 (복사해서 사용하세요)")
+    
+    output_container = st.empty()
 
     if generate_btn:
         if not api_key:
-            st.error("⚠️ API Key가 필요합니다.")
+            st.error("API Key를 입력해주세요.")
         else:
             try:
-                # 모델 설정
+                # 1. 로딩 애니메이션 (움직이는 이미지)
+                # Streamlit은 GIF를 지원합니다. 로딩 중일 때 표시할 GIF URL입니다.
+                loading_gif = "https://i.gifer.com/ZZ5H.gif" # DNA/Brain 로딩 같은 느낌
+                
+                output_container.markdown(f"""
+                    <div class="loading-container">
+                        <img src="{loading_gif}" width="100">
+                        <p style="margin-top:10px; font-weight:bold; color:#aaa;">
+                            최적의 프롬프트를 설계하는 중입니다...<br>
+                            (Prompt Engineering in progress)
+                        </p>
+                    </div>
+                """, unsafe_allow_html=True)
+                
+                # 2. 메타 프롬프트 (AI에게 프롬프트를 짜달라고 시키는 프롬프트)
                 genai.configure(api_key=api_key)
                 model = genai.GenerativeModel(selected_model)
                 
-                # 프롬프트 조합
-                full_prompt = f"""
-                당신은 {persona}입니다. 아래 지시사항을 완벽하게 수행하세요.
+                meta_prompt = f"""
+                당신은 세계 최고의 '프롬프트 엔지니어'입니다.
+                사용자의 요구사항을 분석하여, LLM(Chatgpt, Gemini, Claude 등)에게 입력했을 때 최고의 성능을 낼 수 있는 **'시스템 프롬프트(System Prompt)'**를 작성해주세요.
                 
-                [Task]: {task}
-                [Context]: {context}
-                [Tone]: {tone}
-                [Output Format]: {out_fmt}
+                [사용자 요구사항]
+                - AI 역할: {target_persona}
+                - 수행 작업: {target_task}
+                - 제약/맥락: {user_context}
                 
-                반드시 위 [Output Format]에 맞춰서 답변을 작성하세요.
+                [작성 규칙]
+                1. 프롬프트는 전문적이고 구조화된 형식(마크다운)으로 작성하세요.
+                2. [Role], [Task], [Constraints], [Output Format], [Tone] 등의 섹션을 나누세요.
+                3. 변수 처리가 필요한 곳은 {{변수명}} 형태로 표시하세요.
+                4. 결과물은 바로 복사해서 사용할 수 있는 '코드 블록' 안에 넣어서 출력하세요.
+                5. 언어는 한국어로 작성하되, 필요하다면 영어 프롬프트를 추가로 제안하세요.
                 """
                 
-                # 스트리밍 요청 (타자 치는 효과)
+                # 3. AI 응답 생성
                 response = model.generate_content(
-                    full_prompt,
-                    stream=True, # 여기가 핵심!
+                    meta_prompt,
                     generation_config={"temperature": temperature}
                 )
                 
-                # 스트리밍 출력 로직
-                full_text = ""
-                for chunk in response:
-                    if chunk.text:
-                        full_text += chunk.text
-                        # 마크다운 렌더링을 실시간으로
-                        result_placeholder.markdown(f"""
-                        <div class="result-box">
-                            {full_text} ▌
-                        </div>
-                        """, unsafe_allow_html=True)
-                
-                # 완료 후 커서 제거 및 최종 출력
-                result_placeholder.markdown(f"""
-                <div class="result-box">
-                    {full_text}
-                </div>
-                """, unsafe_allow_html=True)
-                
-            except Exception as e:
-                st.error(f"❌ 에러 발생: {e}")
-                st.warning("API Key가 올바른지, 혹은 모델이 지원되는지 확인해주세요.")
+                # 4. 결과 출력
+                output_container.markdown(response.text)
+                st.success("✅ 생성이 완료되었습니다! 위 내용을 복사해서 AI에게 붙여넣으세요.")
 
+            except Exception as e:
+                output_container.error(f"오류가 발생했습니다: {e}")
+                
     else:
         # 대기 화면
-        result_placeholder.markdown("""
+        output_container.markdown("""
         <div style='text-align: center; color: #6b7280; padding: 100px 0; border: 2px dashed #374151; border-radius: 10px;'>
-            <div style='font-size: 3rem;'>✨</div>
-            <h3>준비 완료</h3>
-            <p>왼쪽에서 설정을 마치고 생성 버튼을 눌러주세요.</p>
+            <h3>👋 준비 완료</h3>
+            <p>왼쪽에서 설정을 마치고<br> <b>[슈퍼 프롬프트 생성]</b> 버튼을 눌러주세요.</p>
         </div>
         """, unsafe_allow_html=True)
