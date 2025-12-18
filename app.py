@@ -2,217 +2,249 @@ import streamlit as st
 import google.generativeai as genai
 
 # ==========================================
-# 1. 페이지 설정 및 디자인 (CSS)
+# 1. 페이지 설정 및 커스텀 디자인 (CSS)
 # ==========================================
 st.set_page_config(
-    page_title="PromptGenesis AI",
-    page_icon="⚡",
+    page_title="PromptGenesis AI V3",
+    page_icon="🧬",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# 커스텀 CSS (스크린샷과 유사한 다크/네온 스타일 적용)
+# 다크/네온 테마 CSS
 st.markdown("""
 <style>
-    /* 전체 배경 및 폰트 */
-    .stApp {
-        background-color: #050a14;
-        color: #ffffff;
+    .stApp { background-color: #0e1117; color: #ffffff; }
+    
+    /* 입력 필드 디자인 */
+    .stTextInput > div > div > input, 
+    .stTextArea > div > div > textarea, 
+    .stSelectbox > div > div > div {
+        background-color: #262730; color: #ffffff; 
+        border: 1px solid #4b5563; border-radius: 8px;
     }
     
-    /* 입력 필드 스타일 */
-    .stTextInput > div > div > input, .stTextArea > div > div > textarea, .stSelectbox > div > div > div {
-        background-color: #0e1629;
-        color: #ffffff;
-        border: 1px solid #1f2a40;
-        border-radius: 8px;
-    }
-    
-    /* 버튼 스타일 */
+    /* 버튼 그라데이션 */
     .stButton > button {
-        background: linear-gradient(90deg, #1e3a8a 0%, #3b82f6 100%);
-        color: white;
-        border: none;
-        border-radius: 8px;
-        height: 50px;
-        width: 100%;
-        font-weight: bold;
-        transition: all 0.3s ease;
+        background: linear-gradient(45deg, #2563eb, #9333ea);
+        color: white; border: none; font-weight: bold;
+        transition: transform 0.2s;
     }
     .stButton > button:hover {
-        opacity: 0.9;
-        box-shadow: 0 0 15px rgba(59, 130, 246, 0.5);
-    }
-
-    /* 헤더 스타일 */
-    h1 {
-        background: -webkit-linear-gradient(#60a5fa, #a78bfa);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        font-weight: 800 !important;
+        transform: scale(1.02);
+        box-shadow: 0 0 10px rgba(147, 51, 234, 0.5);
     }
     
-    /* 상태 표시줄 (우측 상단 흉내) */
-    .status-badge {
-        background-color: #064e3b;
-        color: #34d399;
-        padding: 4px 12px;
-        border-radius: 20px;
-        font-size: 0.8rem;
-        font-weight: bold;
-        border: 1px solid #059669;
-        float: right;
+    /* 결과창 박스 */
+    .result-box {
+        background-color: #1e1e1e; padding: 20px;
+        border-radius: 10px; border: 1px solid #333;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.3);
     }
 </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. 추천 시스템 데이터 (템플릿)
+# 2. 데이터셋: 템플릿 및 옵션 확장
 # ==========================================
-# 사용자가 분야를 고르면 자동으로 채워질 내용들입니다.
+
+# 15가지 이상의 다양한 활용 분야 템플릿
 TEMPLATES = {
-    "직접 입력 (Custom)": {
-        "persona": "",
-        "task": "",
-        "tone": "전문적인 (Professional)"
+    "✨ 직접 입력 (Custom)": {"persona": "", "task": "", "tone": "전문적인"},
+    "📝 블로그 글 (SEO 최적화)": {
+        "persona": "SEO 전문 마케터 및 파워 블로거",
+        "task": "주어진 주제로 검색 엔진 상위 노출을 노리는 블로그 글을 작성하세요. 소제목(H2, H3)을 구조적으로 사용하고, 독자가 머무르는 시간을 늘리기 위해 흥미로운 도입부를 작성하세요.",
+        "tone": "친근하고 유익한"
     },
-    "공문서/보고서 작성": {
-        "persona": "20년차 행정 전문가 및 기획자",
-        "task": "다음 내용을 바탕으로 명확하고 격식 있는 공문서를 작성해주세요. 불필요한 미사여구는 빼고 핵심만 전달하세요.",
-        "tone": "건조하고 명확한 (Dry & Clear)"
+    "📧 비즈니스 콜드 메일": {
+        "persona": "B2B 영업 전문가",
+        "task": "잠재 고객에게 우리 서비스를 소개하고 미팅을 제안하는 콜드 메일을 작성하세요. 스팸처럼 보이지 않도록 개인화된 느낌을 주고, 명확한 Call to Action(CTA)을 포함하세요.",
+        "tone": "정중하지만 설득력 있는"
     },
-    "블로그 글 작성 (SEO)": {
-        "persona": "창의적인 파워 블로거 및 마케터",
-        "task": "독자의 흥미를 끌 수 있는 매력적인 블로그 포스팅을 작성해주세요. 소제목을 잘 활용하고 이모지를 적절히 섞어주세요.",
-        "tone": "친근하고 부드러운 (Friendly)"
+    "📊 엑셀/구글 시트 수식 생성": {
+        "persona": "엑셀 및 데이터 분석 전문가",
+        "task": "사용자가 원하는 데이터 처리를 위한 엑셀(구글 시트) 함수나 매크로를 작성하고, 각 인자에 대해 설명하세요.",
+        "tone": "기술적이고 명확한"
     },
-    "코드 생성 및 리팩토링": {
-        "persona": "구글 출신 시니어 개발자",
-        "task": "아래 요구사항을 만족하는 효율적이고 안전한 코드를 작성해주세요. 코드에는 주석으로 설명을 달아주세요.",
-        "tone": "기술적인 (Technical)"
+    "💻 파이썬 코드 생성 & 설명": {
+        "persona": "Google 출신 시니어 소프트웨어 엔지니어",
+        "task": "요구사항을 해결하는 효율적이고 Pythonic한 코드를 작성하세요. 코드에는 주석을 달고, 하단에 로직에 대한 설명을 덧붙이세요.",
+        "tone": "전문적인 (Technical)"
     },
-    "비즈니스 이메일": {
-        "persona": "글로벌 비즈니스 커뮤니케이션 전문가",
-        "task": "상대방에게 정중하면서도 내 의도가 확실히 전달되도록 비즈니스 이메일 초안을 작성해주세요.",
-        "tone": "정중한 (Polite)"
+    "🎬 유튜브 스크립트 기획": {
+        "persona": "100만 유튜버 PD",
+        "task": "시청 지속 시간을 늘릴 수 있는 유튜브 영상 오프닝 멘트와 전체적인 대본 구성을 짜주세요. 훅(Hook)을 강력하게 넣으세요.",
+        "tone": "재미있고 에너지가 넘치는"
+    },
+    "🎓 영어 회화 튜터": {
+        "persona": "미국 원어민 영어 강사",
+        "task": "사용자의 입력을 자연스러운 원어민 표현으로 교정해주고, 더 세련된 표현 3가지를 추천해주세요.",
+        "tone": "친절하고 교육적인"
+    },
+    "📋 회의록 요약 및 할 일 정리": {
+        "persona": "꼼꼼한 비즈니스 비서",
+        "task": "중구난방인 회의 내용을 바탕으로 [핵심 안건], [결정 사항], [Action Item]으로 나누어 깔끔하게 요약하세요.",
+        "tone": "객관적이고 간결한"
+    },
+    "🎨 인스타그램 캡션 & 해시태그": {
+        "persona": "SNS 인플루언서",
+        "task": "사진에 어울리는 감성적인 글귀와 유입을 늘릴 수 있는 관련 해시태그 15개를 추천해주세요.",
+        "tone": "감성적이고 트렌디한"
+    },
+    "🍔 다이어트 식단 추천": {
+        "persona": "전문 영양사 및 헬스 트레이너",
+        "task": "사용자의 목표에 맞는 하루 식단표를 짜고, 칼로리와 영양소 균형을 설명하세요.",
+        "tone": "동기부여가 되는"
     }
 }
 
-# ==========================================
-# 3. 로직 및 UI 구성
-# ==========================================
+TONE_OPTIONS = [
+    "전문적인 (Professional)", "친근한 (Friendly)", "설득력 있는 (Persuasive)", 
+    "위트 있는 (Witty)", "간결한 (Concise)", "감성적인 (Emotional)", 
+    "비판적인 (Critical)", "교육적인 (Educational)", "자신감 넘치는 (Confident)", "공손한 (Polite)"
+]
 
-# 상태 관리 초기화
-if "result" not in st.session_state:
-    st.session_state.result = ""
+FORMAT_OPTIONS = [
+    "일반 텍스트", "마크다운(Markdown)", "표 (Table)", "HTML 코드", 
+    "JSON 데이터", "이메일 형식", "코드 블록", "체크리스트"
+]
 
-# API 키 설정 (사이드바)
+# ==========================================
+# 3. 사이드바 및 설정 (API & Model)
+# ==========================================
 with st.sidebar:
-    st.image("https://cdn-icons-png.flaticon.com/512/4712/4712038.png", width=50)
-    st.title("Settings")
+    st.header("⚙️ 환경 설정")
     
-    # [보안] 배포 시 st.secrets 사용 권장. 편의상 입력창 유지.
-    api_key_input = st.text_input("Google API Key", value="AIzaSyBVxYQzLTs8uRP4yyJYS8yBDewLSm896Jg", type="password")
+    # 1. API 키 입력 (기본값 설정됨)
+    api_key = st.text_input("Google API Key", value="AIzaSyBVxYQzLTs8uRP4yyJYS8yBDewLSm896Jg", type="password")
     
-    model_name = st.selectbox("Model", ["gemini-1.5-flash-latest", "gemini-1.5-pro-latest"])
-    temperature = st.slider("창의성 (Temperature)", 0.0, 1.0, 0.7)
+    # 2. [핵심] 모델 자동 감지 로직
+    available_models = []
+    if api_key:
+        try:
+            genai.configure(api_key=api_key)
+            # API를 통해 사용 가능한 모델 목록을 가져옵니다.
+            models = genai.list_models()
+            for m in models:
+                if 'generateContent' in m.supported_generation_methods:
+                    # gemini-1.5 가 포함된 모델만 필터링 (최신 모델 위주)
+                    if 'gemini' in m.name:
+                        available_models.append(m.name)
+        except Exception:
+            # API 키가 틀렸거나 네트워크 오류 시 기본값
+            available_models = ["models/gemini-1.5-flash"]
+    
+    # 모델 선택 드롭다운 (이제 에러가 안 납니다!)
+    # 모델 목록이 비어있을 경우 대비
+    if not available_models:
+        available_models = ["models/gemini-1.5-flash"]
+        
+    selected_model = st.selectbox("사용할 AI 모델", available_models, index=0)
+    
+    temperature = st.slider("창의성 (Temperature)", 0.0, 1.0, 0.7, help="높을수록 창의적, 낮을수록 정해진 답을 합니다.")
     
     st.divider()
-    st.markdown("Designed by **Expert AI Dev**")
+    st.info(f"현재 선택된 모델:\n{selected_model}")
 
-# 메인 헤더
-col_h1, col_h2 = st.columns([3, 1])
-with col_h1:
-    st.title("PromptGenesis AI")
-    st.caption("당신의 아이디어를 실행 가능한 고품질 결과물로 진화시킵니다.")
-with col_h2:
-    st.markdown('<div class="status-badge">🟢 SYSTEM OPERATIONAL</div>', unsafe_allow_html=True)
+# ==========================================
+# 4. 메인 UI (2단 레이아웃)
+# ==========================================
+st.title("🧬 PromptGenesis AI V3")
+st.markdown("**당신의 아이디어를 실행 가능한 완벽한 결과물로 변환합니다.**")
 
-st.write("") # 간격
+col_left, col_right = st.columns([1, 1], gap="medium")
 
-# 메인 2단 레이아웃 (좌: 입력 / 우: 출력)
-left_col, right_col = st.columns([1, 1], gap="large")
-
-with left_col:
+# --- 왼쪽: 입력 패널 ---
+with col_left:
     st.subheader("🟦 프롬프트 설계")
     
-    # 1. 추천 기능 (템플릿 선택)
-    selected_template = st.selectbox(
-        "🚀 활용 분야 선택 (추천 템플릿 적용)", 
-        list(TEMPLATES.keys())
-    )
-    
-    # 선택된 템플릿 내용 가져오기
-    current_template = TEMPLATES[selected_template]
+    # 템플릿 선택
+    cat_key = st.selectbox("🚀 활용 분야 선택 (자동 템플릿)", list(TEMPLATES.keys()))
+    curr_tmpl = TEMPLATES[cat_key]
 
-    # 2. 입력 폼 (자동으로 채워짐)
-    persona = st.text_input("🎭 페르소나 / 역할", value=current_template["persona"], placeholder="예: 20년차 마케팅 전문가")
-    
-    task = st.text_area("🎯 핵심 과제 (구체적 지시)", value=current_template["task"], height=150, placeholder="AI가 수행해야 할 구체적인 작업을 적어주세요.")
-    
-    context = st.text_area("📂 배경 자료 / 맥락", height=100, placeholder="참고할 데이터, 제약 조건, 행사 정보 등을 붙여넣으세요...")
+    # 입력 폼
+    persona = st.text_input("🎭 페르소나 (역할)", value=curr_tmpl["persona"])
+    task = st.text_area("🎯 핵심 과제 (지시사항)", value=curr_tmpl["task"], height=150)
+    context = st.text_area("📂 배경 자료 / 데이터", placeholder="참고할 텍스트나 데이터를 여기에 붙여넣으세요...", height=100)
     
     c1, c2 = st.columns(2)
     with c1:
-        output_format = st.text_input("📝 출력 형식", placeholder="예: 마크다운, 표, 리스트")
+        # 출력 형식을 다중 선택이 아닌 단일 선택으로 변경 (명확성을 위해) 또는 콤보박스
+        out_fmt = st.selectbox("📝 출력 형식", FORMAT_OPTIONS)
     with c2:
-        tone = st.selectbox("🗣️ 어조 (Tone)", ["전문적인", "친근한", "간결한", "감성적인"], index=0 if current_template["tone"] == "전문적인 (Professional)" else 1)
+        # 톤 선택 (기본값 매칭)
+        # 템플릿의 톤이 옵션에 있으면 그걸 선택, 아니면 첫 번째
+        default_tone_idx = 0
+        for i, t in enumerate(TONE_OPTIONS):
+            if curr_tmpl["tone"] in t:
+                default_tone_idx = i
+                break
+        tone = st.selectbox("🗣️ 어조 (Tone)", TONE_OPTIONS, index=default_tone_idx)
 
-    # 생성 버튼
-    generate_btn = st.button("✨ 결과 생성 (Generate)")
+    generate_btn = st.button("✨ 결과 생성 (Generate)", type="primary")
 
-# 결과 생성 로직
-if generate_btn:
-    if not api_key_input:
-        st.error("API Key를 입력해주세요.")
-    else:
-        try:
-            # Gemini 설정
-            genai.configure(api_key=api_key_input)
-            model = genai.GenerativeModel(model_name)
-            
-            # 프롬프트 조합
-            full_prompt = f"""
-            [Role]: {persona}
-            [Task]: {task}
-            [Context]: {context}
-            [Tone]: {tone}
-            [Output Format]: {output_format}
-            
-            위 지시사항에 맞춰 최상의 답변을 작성해줘.
-            """
-            
-            # 우측 패널에 로딩 표시
-            with right_col:
-                with st.spinner("AI가 최적화된 결과를 생성 중입니다..."):
-                    response = model.generate_content(
-                        full_prompt,
-                        generation_config={"temperature": temperature}
-                    )
-                    st.session_state.result = response.text
-        except Exception as e:
-            st.error(f"에러 발생: {e}")
-
-# 우측 패널 (출력)
-with right_col:
+# --- 오른쪽: 결과 패널 ---
+with col_right:
     st.subheader("🟩 결과 확인")
-    
-    # 결과가 들어갈 컨테이너 스타일링
-    result_container = st.container(border=True)
-    with result_container:
-        if st.session_state.result:
-            st.markdown(st.session_state.result)
-            st.markdown("---")
-            st.caption("✅ 생성이 완료되었습니다. 내용을 복사하여 사용하세요.")
+    result_placeholder = st.empty() # 결과를 스트리밍으로 보여줄 공간
+
+    if generate_btn:
+        if not api_key:
+            st.error("⚠️ API Key가 필요합니다.")
         else:
-            # 대기 화면 (스크린샷의 로고 느낌)
-            st.markdown(
+            try:
+                # 모델 설정
+                genai.configure(api_key=api_key)
+                model = genai.GenerativeModel(selected_model)
+                
+                # 프롬프트 조합
+                full_prompt = f"""
+                당신은 {persona}입니다. 아래 지시사항을 완벽하게 수행하세요.
+                
+                [Task]: {task}
+                [Context]: {context}
+                [Tone]: {tone}
+                [Output Format]: {out_fmt}
+                
+                반드시 위 [Output Format]에 맞춰서 답변을 작성하세요.
                 """
-                <div style='text-align: center; color: #4b5563; padding: 100px 0;'>
-                    <div style='font-size: 3rem;'>✨</div>
-                    <h3>최적화 준비 완료</h3>
-                    <p>왼쪽 패널에 정보를 입력하고 생성 버튼을 눌러주세요.</p>
+                
+                # 스트리밍 요청 (타자 치는 효과)
+                response = model.generate_content(
+                    full_prompt,
+                    stream=True, # 여기가 핵심!
+                    generation_config={"temperature": temperature}
+                )
+                
+                # 스트리밍 출력 로직
+                full_text = ""
+                for chunk in response:
+                    if chunk.text:
+                        full_text += chunk.text
+                        # 마크다운 렌더링을 실시간으로
+                        result_placeholder.markdown(f"""
+                        <div class="result-box">
+                            {full_text} ▌
+                        </div>
+                        """, unsafe_allow_html=True)
+                
+                # 완료 후 커서 제거 및 최종 출력
+                result_placeholder.markdown(f"""
+                <div class="result-box">
+                    {full_text}
                 </div>
-                """, 
-                unsafe_allow_html=True
-            )
+                """, unsafe_allow_html=True)
+                
+            except Exception as e:
+                st.error(f"❌ 에러 발생: {e}")
+                st.warning("API Key가 올바른지, 혹은 모델이 지원되는지 확인해주세요.")
+
+    else:
+        # 대기 화면
+        result_placeholder.markdown("""
+        <div style='text-align: center; color: #6b7280; padding: 100px 0; border: 2px dashed #374151; border-radius: 10px;'>
+            <div style='font-size: 3rem;'>✨</div>
+            <h3>준비 완료</h3>
+            <p>왼쪽에서 설정을 마치고 생성 버튼을 눌러주세요.</p>
+        </div>
+        """, unsafe_allow_html=True)
